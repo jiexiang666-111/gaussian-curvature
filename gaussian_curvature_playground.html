@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高斯曲率極簡探索器 | Interactive Gaussian Curvature</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            500: '#0284c7',
+                            600: '#0369a1'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- KaTeX for math formulas -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body);"></script>
+    
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 3px; }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans h-screen overflow-hidden flex flex-col select-none">
+
+    <header class="h-14 border-b border-slate-800 bg-slate-900/80 px-4 flex items-center justify-between z-20 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-sky-500/20 text-sky-400 rounded-lg border border-sky-500/30">
+                <i data-lucide="shapes" class="w-5 h-5"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-sm sm:text-base tracking-wide flex items-center gap-2">
+                    高斯曲率極簡探索器
+                    <span class="text-xs font-normal px-2 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800">K = κ₁ × κ₂</span>
+                </h1>
+            </div>
+        </div>
+        <div class="text-xs text-slate-400 hidden sm:block">
+            拉動滑桿或在 3D 空間中直接拖拽圖形，直觀體驗曲面變形！
+        </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden relative">
+
+        <!-- Left Sidebar: Controls & Presets -->
+        <aside class="w-80 border-r border-slate-800 bg-slate-900/80 flex flex-col z-10 shrink-0 overflow-y-auto p-4 space-y-6">
+            
+            <!-- Presets Section -->
+            <div>
+                <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2.5">快速形狀預設 (Presets)</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="setCurvatures(1.2, 1.2)" class="p-2.5 rounded-xl border border-slate-800 bg-slate-950 hover:border-red-500/50 hover:bg-red-950/20 transition text-left group">
+                        <div class="text-base mb-1">🥣 碗狀 / Dome</div>
+                        <div class="text-[10px] text-red-400 font-bold font-mono">K > 0 (正曲率)</div>
+                    </button>
+                    <button onclick="setCurvatures(1.2, -1.2)" class="p-2.5 rounded-xl border border-slate-800 bg-slate-950 hover:border-blue-500/50 hover:bg-blue-950/20 transition text-left group">
+                        <div class="text-base mb-1">🥔 洋芋片 / Saddle</div>
+                        <div class="text-[10px] text-blue-400 font-bold font-mono">K < 0 (負曲率)</div>
+                    </button>
+                    <button onclick="setCurvatures(1.5, 0)" class="p-2.5 rounded-xl border border-slate-800 bg-slate-950 hover:border-emerald-500/50 hover:bg-emerald-950/20 transition text-left group">
+                        <div class="text-base mb-1">🥤 圓柱 / Cylinder</div>
+                        <div class="text-[10px] text-emerald-400 font-bold font-mono">K = 0 (零曲率)</div>
+                    </button>
+                    <button onclick="setCurvatures(0, 0)" class="p-2.5 rounded-xl border border-slate-800 bg-slate-950 hover:border-slate-500/50 hover:bg-slate-800/20 transition text-left group">
+                        <div class="text-base mb-1">📄 平面 / Flat</div>
+                        <div class="text-[10px] text-slate-400 font-bold font-mono">K = 0 (零曲率)</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sliders Section -->
+            <div class="space-y-5 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+                <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400 block border-b border-slate-800 pb-2">自由調整主曲率 (Curvatures)</label>
+
+                <!-- Slider k1 -->
+                <div class="space-y-1.5">
+                    <div class="flex justify-between text-xs font-mono">
+                        <span class="text-amber-400 font-bold flex items-center gap-1">
+                            <span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span> 第一切面曲率 κ₁
+                        </span>
+                        <span id="val-k1" class="font-bold text-amber-300">+1.20</span>
+                    </div>
+                    <input type="range" id="slider-k1" min="-2.0" max="2.0" step="0.05" value="1.2" oninput="onSliderChange()" class="w-full accent-amber-500 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                    <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                        <span>-2.0 (向下向下 🙁)</span>
+                        <span>0 (平 😐)</span>
+                        <span>+2.0 (向上 🗿)</span>
+                    </div>
+                </div>
+
+                <!-- Slider k2 -->
+                <div class="space-y-1.5">
+                    <div class="flex justify-between text-xs font-mono">
+                        <span class="text-sky-400 font-bold flex items-center gap-1">
+                            <span class="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block"></span> 第二切面曲率 κ₂
+                        </span>
+                        <span id="val-k2" class="font-bold text-sky-300">+1.20</span>
+                    </div>
+                    <input type="range" id="slider-k2" min="-2.0" max="2.0" step="0.05" value="1.2" oninput="onSliderChange()" class="w-full accent-sky-500 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                    <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                        <span>-2.0 (向下 🙁)</span>
+                        <span>0 (平 😐)</span>
+                        <span>+2.0 (向上 🙂)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Heatmap color scale -->
+            <div class="mt-auto pt-2">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">曲面色彩即時高斯曲率熱力圖</span>
+                <div class="h-3 rounded-md bg-gradient-to-r from-blue-600 via-slate-200 to-red-500 relative mb-1"></div>
+                <div class="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>藍色: K < 0 (負)</span>
+                    <span>白色: K = 0 (零)</span>
+                    <span>紅色: K > 0 (正)</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 relative bg-slate-950 flex flex-col overflow-hidden">
+            <!-- 3D Canvas -->
+            <div id="canvas-container" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+
+            <!-- HUD 1: Giant Intuitive Math Expression Top Left -->
+            <div class="absolute top-4 left-4 glass-panel rounded-2xl p-4 shadow-2xl pointer-events-none max-w-sm space-y-3">
+                <div class="text-[11px] uppercase tracking-wider text-slate-400 font-bold flex items-center gap-1.5">
+                    <i data-lucide="calculator" class="w-3.5 h-3.5 text-sky-400"></i> 高斯曲率實時算式
+                </div>
+
+                <div class="flex items-center justify-around bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                    <!-- Direction 1 -->
+                    <div class="text-center">
+                        <div id="icon-k1" class="text-3xl mb-1">🙂</div>
+                        <span class="text-[10px] text-slate-400 font-mono block">κ₁</span>
+                        <span id="card-k1-val" class="text-xs font-bold text-amber-400 font-mono">+1.20</span>
+                    </div>
+
+                    <div class="text-slate-400 font-bold text-xl">×</div>
+
+                    <!-- Direction 2 -->
+                    <div class="text-center">
+                        <div id="icon-k2" class="text-3xl mb-1">🙂</div>
+                        <span class="text-[10px] text-slate-400 font-mono block">κ₂</span>
+                        <span id="card-k2-val" class="text-xs font-bold text-sky-400 font-mono">+1.20</span>
+                    </div>
+
+                    <div class="text-slate-400 font-bold text-xl">=</div>
+
+                    <!-- Result K -->
+                    <div class="text-center pl-1">
+                        <div id="card-K-badge" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-950 text-red-300 border border-red-800 mb-1">
+                            K > 0
+                        </div>
+                        <span class="text-[10px] text-slate-400 font-mono block">高斯曲率 K</span>
+                        <span id="card-K-val" class="text-sm font-extrabold text-red-400 font-mono">+1.4400</span>
+                    </div>
+                </div>
+
+                <!-- Key Takeaway Text -->
+                <p id="takeaway-text" class="text-xs text-slate-200 leading-relaxed bg-sky-950/40 p-2.5 rounded-lg border border-sky-900/50">
+                    同向彎曲：兩個方向同時向上或同時向下（同號相乘為正）。就像碗或籃球！
+                </p>
+            </div>
+
+            <!-- Drag Instruction Banner -->
+            <div class="absolute bottom-4 left-4 glass-panel px-3.5 py-2 rounded-xl text-xs text-slate-300 flex items-center gap-2 pointer-events-none">
+                <i data-lucide="hand" class="w-4 h-4 text-amber-400 animate-bounce"></i>
+                <span>小技巧：可用滑鼠在 3D 空間中<b>直接拖拽黃色/藍色手把</b>來變形曲面！</span>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // State
+        let k1 = 1.20;
+        let k2 = 1.20;
+
+        // Three.js Globals
+        let scene, camera, renderer, controls;
+        let surfaceMesh, wireframeMesh;
+        let handleK1, handleK2; // Interactive 3D Drag Control Points
+        let raycaster, mouse;
+        let activeHandle = null;
+
+        const GRID_SIZE = 40;
+        const DOMAIN_SIZE = 3.0;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initScene();
+            createSurface();
+            createHandles();
+            initDragEvents();
+            updateUI();
+            animate();
+
+            if (window.lucide) lucide.createIcons();
+        });
+
+        function initScene() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x070a12);
+
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+            camera.position.set(3.5, 3.0, 4.5);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Lights
+            const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambient);
+
+            const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight1.position.set(5, 10, 7);
+            scene.add(dirLight1);
+
+            const dirLight2 = new THREE.DirectionalLight(0x38bdf8, 0.3);
+            dirLight2.position.set(-5, -5, -5);
+            scene.add(dirLight2);
+
+            // Floor Grid
+            const gridHelper = new THREE.GridHelper(10, 20, 0x1e293b, 0x0f172a);
+            gridHelper.position.y = -1.8;
+            scene.add(gridHelper);
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+        }
+
+        // Generate Quadric Surface z = 0.5 * (k1 * x^2 + k2 * y^2)
+        function createSurface() {
+            const geometry = new THREE.BufferGeometry();
+            const positions = [];
+            const colors = [];
+            const indices = [];
+
+            const N = GRID_SIZE;
+            const half = DOMAIN_SIZE / 2;
+
+            for (let i = 0; i <= N; i++) {
+                const x = -half + (i / N) * DOMAIN_SIZE;
+                for (let j = 0; j <= N; j++) {
+                    const y = -half + (j / N) * DOMAIN_SIZE;
+                    const z = 0.5 * (k1 * x * x + k2 * y * y);
+
+                    positions.push(x, z, y);
+
+                    // Heatmap color based on local Gaussian curvature K = k1 * k2
+                    const K = k1 * k2;
+                    const col = getColorForK(K);
+                    colors.push(col.r, col.g, col.b);
+                }
+            }
+
+            for (let i = 0; i < N; i++) {
+                for (let j = 0; j < N; j++) {
+                    const a = i * (N + 1) + j;
+                    const b = (i + 1) * (N + 1) + j;
+                    const c = (i + 1) * (N + 1) + (j + 1);
+                    const d = i * (N + 1) + (j + 1);
+
+                    indices.push(a, b, d);
+                    indices.push(b, c, d);
+                }
+            }
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            geometry.setIndex(indices);
+            geometry.computeVertexNormals();
+
+            const mat = new THREE.MeshPhongMaterial({
+                vertexColors: true,
+                side: THREE.DoubleSide,
+                shininess: 40
+            });
+
+            surfaceMesh = new THREE.Mesh(geometry, mat);
+            scene.add(surfaceMesh);
+
+            // Wireframe Overlay
+            const wireMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.15 });
+            wireframeMesh = new THREE.Mesh(geometry, wireMat);
+            scene.add(wireframeMesh);
+        }
+
+        function getColorForK(K) {
+            const clamped = Math.max(-2, Math.min(2, K)) / 2.0; // [-1, 1]
+            const color = new THREE.Color();
+
+            if (clamped > 0.05) {
+                // Red for K > 0
+                color.setHSL(0, 0.85, 0.4 + clamped * 0.2);
+            } else if (clamped < -0.05) {
+                // Blue for K < 0
+                color.setHSL(0.6, 0.85, 0.4 + Math.abs(clamped) * 0.2);
+            } else {
+                // Bright white for K = 0
+                color.setRGB(0.9, 0.95, 0.9);
+            }
+            return color;
+        }
+
+        // Interactive 3D Control Handles at the edges
+        function createHandles() {
+            const geo1 = new THREE.SphereGeometry(0.12, 16, 16);
+            const mat1 = new THREE.MeshBasicMaterial({ color: 0xf59e0b }); // Amber for k1
+            handleK1 = new THREE.Mesh(geo1, mat1);
+            scene.add(handleK1);
+
+            const geo2 = new THREE.SphereGeometry(0.12, 16, 16);
+            const mat2 = new THREE.MeshBasicMaterial({ color: 0x38bdf8 }); // Sky for k2
+            handleK2 = new THREE.Mesh(geo2, mat2);
+            scene.add(handleK2);
+
+            updateHandlePositions();
+        }
+
+        function updateHandlePositions() {
+            const x1 = DOMAIN_SIZE / 2;
+            const z1 = 0.5 * k1 * x1 * x1;
+            handleK1.position.set(x1, z1, 0);
+
+            const y2 = DOMAIN_SIZE / 2;
+            const z2 = 0.5 * k2 * y2 * y2;
+            handleK2.position.set(0, z2, y2);
+        }
+
+        function updateSurfaceGeometry() {
+            if (!surfaceMesh) return;
+
+            const pos = surfaceMesh.geometry.attributes.position.array;
+            const col = surfaceMesh.geometry.attributes.color.array;
+
+            const N = GRID_SIZE;
+            const half = DOMAIN_SIZE / 2;
+            const K = k1 * k2;
+            const colorObj = getColorForK(K);
+
+            let idx = 0;
+            for (let i = 0; i <= N; i++) {
+                const x = -half + (i / N) * DOMAIN_SIZE;
+                for (let j = 0; j <= N; j++) {
+                    const y = -half + (j / N) * DOMAIN_SIZE;
+                    const z = 0.5 * (k1 * x * x + k2 * y * y);
+
+                    pos[idx + 1] = z; // Update Y (Up vector in Three.js)
+
+                    col[idx] = colorObj.r;
+                    col[idx + 1] = colorObj.g;
+                    col[idx + 2] = colorObj.b;
+
+                    idx += 3;
+                }
+            }
+
+            surfaceMesh.geometry.attributes.position.needsUpdate = true;
+            surfaceMesh.geometry.attributes.color.needsUpdate = true;
+            surfaceMesh.geometry.computeVertexNormals();
+
+            updateHandlePositions();
+        }
+
+        function onSliderChange() {
+            k1 = parseFloat(document.getElementById('slider-k1').value);
+            k2 = parseFloat(document.getElementById('slider-k2').value);
+
+            updateSurfaceGeometry();
+            updateUI();
+        }
+
+        function setCurvatures(v1, v2) {
+            k1 = v1;
+            k2 = v2;
+
+            document.getElementById('slider-k1').value = k1;
+            document.getElementById('slider-k2').value = k2;
+
+            updateSurfaceGeometry();
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('val-k1').innerText = (k1 >= 0 ? '+' : '') + k1.toFixed(2);
+            document.getElementById('val-k2').innerText = (k2 >= 0 ? '+' : '') + k2.toFixed(2);
+
+            document.getElementById('card-k1-val').innerText = (k1 >= 0 ? '+' : '') + k1.toFixed(2);
+            document.getElementById('card-k2-val').innerText = (k2 >= 0 ? '+' : '') + k2.toFixed(2);
+
+            const K = k1 * k2;
+            document.getElementById('card-K-val').innerText = (K >= 0 ? '+' : '') + K.toFixed(4);
+
+            // Emoji Indicators
+            const getIcon = (v) => {
+                if (v > 0.1) return '🙂';
+                if (v < -0.1) return '🙁';
+                return '😐';
+            };
+
+            document.getElementById('icon-k1').innerText = getIcon(k1);
+            document.getElementById('icon-k2').innerText = getIcon(k2);
+
+            const badge = document.getElementById('card-K-badge');
+            const takeaway = document.getElementById('takeaway-text');
+
+            if (K > 0.02) {
+                badge.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-red-950 text-red-300 border border-red-800 mb-1';
+                badge.innerText = '正曲率 K > 0';
+                takeaway.innerText = '🙂 × 🙂 (或 🙁 × 🙁) = 正！兩切面朝同方向彎曲。形狀像碗或籃球 (Bowl/Dome)，無法被無痕剪平。';
+            } else if (K < -0.02) {
+                badge.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-950 text-blue-300 border border-blue-800 mb-1';
+                badge.innerText = '負曲率 K < 0';
+                takeaway.innerText = '🙂 × 🙁 = 負！兩切面朝相反方向彎曲。形狀像洋芋片或馬鞍 (Saddle/Pringles)，具有對角張力。';
+            } else {
+                badge.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-950 text-emerald-300 border border-emerald-800 mb-1';
+                badge.innerText = '零曲率 K = 0';
+                takeaway.innerText = '🙂 × 😐 = 0！包含至少一個完全平直的方向。形狀像捲紙或圓柱面 (Cylinder)，可以 100% 完美展開成平面！';
+            }
+        }
+
+        // 3D Direct Dragging Control Handles
+        function initDragEvents() {
+            const container = document.getElementById('canvas-container');
+
+            container.addEventListener('mousedown', (e) => {
+                const rect = container.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / container.clientWidth) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects([handleK1, handleK2]);
+
+                if (intersects.length > 0) {
+                    activeHandle = intersects[0].object;
+                    controls.enabled = false; // Disable orbit camera while dragging
+                }
+            });
+
+            container.addEventListener('mousemove', (e) => {
+                if (!activeHandle) return;
+
+                const rect = container.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / container.clientWidth) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
+
+                // Simple vertical drag displacement for curvature adjustment
+                const deltaY = mouse.y * 2.0;
+
+                if (activeHandle === handleK1) {
+                    k1 = Math.max(-2.0, Math.min(2.0, deltaY));
+                    document.getElementById('slider-k1').value = k1;
+                } else if (activeHandle === handleK2) {
+                    k2 = Math.max(-2.0, Math.min(2.0, deltaY));
+                    document.getElementById('slider-k2').value = k2;
+                }
+
+                updateSurfaceGeometry();
+                updateUI();
+            });
+
+            window.addEventListener('mouseup', () => {
+                activeHandle = null;
+                controls.enabled = true;
+            });
+
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
